@@ -1,0 +1,6 @@
+/build/
+/CMakeFiles/
+/CMakeCache.txt
+/.cache/
+/.venv/
+__pycache__/

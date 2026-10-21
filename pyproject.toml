@@ -1,0 +1,18 @@
+[project]
+name = "music-as-becoming"
+version = "0.1.0"
+description = "Python/music21 transformation worker for the Music as Becoming editor"
+requires-python = ">=3.11,<4.0"
+dependencies = [
+    "music21==10.5.0",
+]
+
+[project.scripts]
+mefap = "mefap:main"
+
+[tool.poetry]
+packages = [{include = "mefap.py"}]
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
