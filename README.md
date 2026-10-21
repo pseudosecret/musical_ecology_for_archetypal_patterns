@@ -1,11 +1,24 @@
 # Music as Becoming: notation editor prototype
 
-This is a keyboard-first desktop notation editor prototype. It supports
-multiple parts/staves, chords, rests, ties, clef/key/meter/tempo changes, FluidSynth
-playback, and save/reopen of a supported MusicXML subset. The score model,
-engraving, and playback timing live in C++; QML provides the application controls.
+Music as Becoming is a keyboard-first desktop notation editor prototype with
+multiple parts/staves, chords, rests, ties, tuplets, clef/key/meter/tempo changes,
+passage copy/paste, built-in FluidSynth playback, and MusicXML save/reopen.
+
+An optional Python/music21 worker adds ordered, key-aware passage transformations,
+interactive previews with automatic audition, and deterministic melody analysis.
+Results open as editable scratch scores; analysis reports expose tonal candidates,
+cells, gestures, and motif candidates for inspection and review.
+
+The canonical score model, engraving, and playback timing live in C++23; Qt Quick/QML
+provides the application controls. Editing, playback, and MusicXML work without
+Python. See [ARCHITECTURE.md](ARCHITECTURE.md) for subsystem boundaries.
 
 ## Build and run
+
+Building requires a C++23 compiler, CMake 3.22+, Qt 6.2+ (Core, Gui, Qml, Quick,
+Xml, and Test), pkg-config, and FluidSynth. Linux builds also require the
+PulseAudio client library. Python 3.11+ and music21 are optional; see
+[Passage transformations and Python setup](#passage-transformations-and-python-setup).
 
 On Ubuntu 22.04, install the build tools **and** the runtime plugins/modules:
 
@@ -120,25 +133,38 @@ Click an event to select it, then use:
 | `Shift+A`–`Shift+G` | Add a pitch to the selected note/chord |
 | `Left` / `Right` | Select the previous / next event |
 | `Shift+Left` / `Shift+Right` | Extend or contract one continuous time selection |
+| `Shift+click` | Extend the time selection to the clicked event or measure |
 | `Ctrl+click` | Add or remove a staff from that same time selection |
 | `Ctrl+C` / `Ctrl+V` | Copy / overwrite-paste the selected passage |
-| `T` / `Shift+T` | Transform or analyze a single-staff passage / open tempo settings |
+| `T` | Open transformations, interactive preview, or analysis for a single-staff passage |
+| `S` / `M` / `Shift+T` | Open clef / time signature / tempo settings |
 | `Up` / `Down` | Move the selected pitch by one staff step |
 | `Shift+Up` / `Shift+Down` | Move the selected pitch by a semitone |
 | `Ctrl+Up` / `Ctrl+Down` | Move the selected pitch by an octave |
 | `[` / `]` | Halve / double the selected duration |
 | `.` | Toggle a duration dot |
+| `Ctrl+[` / `Ctrl+]` / `Ctrl+.` | Change duration or dot without overwriting following notes |
+| `,` | Toggle a tie from the selected pitch to the next event |
 | `3` / `5` / `7` | Divide the selected note/rest into a triplet, quintuplet, or septuplet |
 | `+` / `-` / `=` | Sharp / flat / natural |
 | `Space` | Play from the selected measure (the first measure by default), or stop if playing |
-| `Delete` / `Backspace` | Replace the selected note with a rest; remove a clicked clef change |
+| `Delete` / `Backspace` | Replace the selected note/chord with a rest; remove a clicked clef or key change |
 | `P` / `Shift+P` | Play from the beginning / selected measure; press again to stop |
-| `Ctrl+Z` / `Ctrl+Y` | Undo / redo |
+| `Escape` | Stop playback or pending preview audition and clear the range selection |
+| `Ctrl+Z` | Undo |
+| `Ctrl+Y` / `Ctrl+Shift+Z` | Redo |
 | `Ctrl+S` / `Ctrl+O` / `Ctrl+N` | Save / open / new score |
 
 Plain note entry advances into the next rest while keeping the entered note
 selected. This lets `C`, `Shift+E`, `G` enter a C–E chord followed by G.
 Editing is disabled during playback.
+
+Lengthening a duration or adding a dot can overwrite following notes and rests
+within the measure. Hold Ctrl to allow growth only into rests; the edit is rejected
+if a following note blocks it. Shortening leaves rests without moving later music.
+Duration edits stay within the measure or tuplet, and new notes use the current
+entry duration, shortened when needed to fit the available rests. A comma tie can
+fill a following rest with the same pitch or join an existing matching pitch.
 
 Selected noteheads and rests are orange. Selecting a measure highlights its
 region. `S` opens the clef dialog, `M` the time signature, `Shift+T` the tempo,
@@ -158,9 +184,14 @@ the window. Source music and its report/reviews are unchanged.
 
 To remove a clef change, click its symbol and choose **Remove change**, or press
 Delete after closing the dialog. The initial clef is retained; later changes
-can be removed and undone. Instrument choices in **Instrumentation** apply
-immediately; **Use part instrument** clears a staff's override so it follows
-the part. **Rename** applies name edits.
+can be removed and undone.
+
+Use **Instrumentation…** to add parts, create a two-staff piano part, add or remove
+staves, and reorder staves. In **Parts & groups**, select adjacent parts and choose
+**Group selected parts** to add an ensemble bracket; a part's multiple staves share
+a brace. Part and staff instruments can be previewed before use. Instrument choices
+apply immediately; **Use part instrument** clears a staff's override so it follows
+the part. **Rename** applies name edits. These score changes support undo/redo.
 
 For copy/paste, select a note, rest, or measure and use Shift+Left/Right or
 Shift-click to extend the time range. Ctrl-click another staff to include or
@@ -200,15 +231,23 @@ Undo reverses creation.
 
 ## Current scope
 
-MusicXML import accepts the supported multi-part/multi-staff subset this
-prototype writes, with one voice per staff. Unsupported notation is rejected
-with an error instead of silently changing the music. MIDI file import/export,
-multiple voices per staff, broader MusicXML support, and full orchestral
-engraving remain future work.
+The editor imports and exports an uncompressed, score-partwise MusicXML subset
+(`.musicxml` / `.xml`) with multiple parts/staves and one voice per staff.
+MusicXML is also the save/reopen format. Unsupported notation is rejected
+with an error instead of silently changing the music.
+
+MIDI file import/export, multiple voices per staff, broader MusicXML support, and
+full orchestral engraving remain future work. Transformations, interactive preview,
+and melody analysis are implemented, but their workspace, analysis/review state,
+and transformation ancestry are not persisted. Save scratch scores explicitly as
+MusicXML to retain their notation. Language-model control, plugin instruments, and
+DSP remain later work. The large-score workload in [AGENTS.md](AGENTS.md) is a
+performance target, not a claim of complete orchestral-editor support.
 
 ## Passage transformations and Python setup
 
-Use Poetry from the project root to install the optional transformation dependencies:
+After configuring and building the C++ editor above, use Poetry from the project
+root to install the optional transformation and analysis dependencies:
 
 ```sh
 poetry install
@@ -226,11 +265,12 @@ retry `poetry run mefap`.
 
 Dependencies are declared in the root `pyproject.toml`; Poetry manages the
 Python 3.11+ environment. No shell activation is needed. `poetry run` supplies
-the worker's interpreter through PATH; `MUSIC_PYTHON` can explicitly override it.
+the worker's default `python3` interpreter through PATH; `MUSIC_PYTHON` can explicitly
+override it with the path to another Python interpreter.
 The editor does not select a project-local `.venv` automatically.
 This launches the same C++ audio engine as running the binary directly; Poetry
 provides the Python environment, and the worker starts on the first Submit,
-Analyze selection, or key-suggestion request.
+interactive preview, Analyze selection, or key-suggestion request.
 CMake copies the worker beside the executable into `build/python/`. No Python
 interpreter is embedded, and missing Python/music21 only disables transformations and analysis.
 The editor never installs packages or writes a score automatically.
